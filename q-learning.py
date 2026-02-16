@@ -158,6 +158,35 @@ def obtener_ruta(Q, R, start_i, goal_i):
 # ============================
 # BUCLE PRINCIPAL
 # ============================
+# ============================
+# MOSTRAR MATRIZ DE RECOMPENSAS
+# ============================
+
+def mostrar_matriz_recompensas(R):
+
+    print("\nMATRIZ DE RECOMPENSAS (R):\n")
+
+    # encabezado
+    print("   ", end="")
+    for s in states:
+        print(f"{s:4}", end="")
+    print()
+
+    for i in range(n):
+
+        print(f"{states[i]:3}", end="")
+
+        for j in range(n):
+
+            valor = R[i, j]
+
+            if np.isinf(valor):
+                print(" -∞ ", end="")
+            else:
+                print(f"{int(valor):4}", end="")
+
+        print()
+
 
 while True:
     mostrar_matriz_adyacencia()
@@ -179,11 +208,14 @@ while True:
     print("\nEntrenando agente...")
 
     Q, R = entrenar(goal_i)
+    mostrar_matriz_recompensas(R)
+
 
     path = obtener_ruta(Q, R, start_i, goal_i)
 
     print("\nRuta óptima:")
     print(" → ".join(path))
+    
 
     # ============================
     # PREGUNTAR SI QUIERE OTRA RUTA
