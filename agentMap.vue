@@ -114,6 +114,42 @@
           </div>
         </div>
       </section>
+      <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h2 class="font-semibold">Matriz de adyacencia (A)</h2>
+      <p class="text-sm text-slate-300">1 = hay conexión, 0 = no hay conexión</p>
+    </div>
+  </div>
+
+  <div class="overflow-auto rounded-2xl border border-slate-800 bg-slate-950">
+    <table class="min-w-[900px] w-full text-sm">
+      <thead class="sticky top-0 bg-slate-950">
+        <tr>
+          <th class="text-left p-2 border-b border-slate-800">A</th>
+          <th v-for="c in states" :key="`a-col-${c}`" class="p-2 border-b border-slate-800 text-center">
+            {{ c }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="r in states" :key="`a-row-${r}`" class="odd:bg-slate-900/20">
+          <td class="p-2 border-b border-slate-800 font-semibold">{{ r }}</td>
+          <td
+            v-for="c in states"
+            :key="`a-cell-${r}-${c}`"
+            class="p-2 border-b border-slate-800 text-center font-mono"
+          >
+            <span :class="adjacencyMatrix[r][c] ? 'text-slate-100' : 'text-slate-600'">
+              {{ adjacencyMatrix[r][c] }}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 
       <!-- Recompensas: Vista entendible -->
       <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
@@ -225,6 +261,19 @@
 </template>
 
 <script setup>
+const adjacencyMatrix = computed(() => {
+  const m = {};
+  for (const r of states) {
+    m[r] = {};
+    for (const c of states) m[r][c] = 0;
+  }
+  for (const [u, v] of edges) {
+    m[u][v] = 1;
+    m[v][u] = 1;
+  }
+  return m;
+});
+
 import { computed, ref, watch } from "vue";
 
 /** Estados */
