@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Agente Inteligente - Mapa (Grafo)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="max-w-6xl mx-auto p-6">
+    <header class="flex flex-col gap-2 mb-6">
+      <h1 class="text-2xl font-semibold">Agente Inteligente (Mapa del Grafo)</h1>
+      <p class="text-slate-300">
+        Selecciona estado inicial y meta. Se mostrará una ruta y el agente se moverá nodo por nodo.
+      </p>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Panel controles -->
+      <section class="lg:col-span-1 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow">
+        <h2 class="text-lg font-semibold mb-4">Controles</h2>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm text-slate-300 mb-2">Estado inicial</label>
+            <select id="startSel" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-sky-500"></select>
+          </div>
+
+          <div>
+            <label class="block text-sm text-slate-300 mb-2">Estado meta</label>
+            <select id="goalSel" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"></select>
+          </div>
+
+          <div class="flex gap-3">
+            <button id="btnRuta"
+              class="flex-1 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 px-4 py-2 font-medium">
+              Calcular ruta
+            </button>
+            <button id="btnAnim"
+              class="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 px-4 py-2 font-medium">
+              Animar
+            </button>
+          </div>
+
+          <div class="flex gap-3">
+            <button id="btnReset"
+              class="flex-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 px-4 py-2 font-medium">
+              Reset
+            </button>
+            <button id="btnSpeed"
+              class="flex-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 px-4 py-2 font-medium">
+              Velocidad: <span id="speedLabel">1x</span>
+            </button>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+            <div class="text-sm text-slate-300 mb-2">Ruta (nodos)</div>
+            <div id="rutaTxt" class="text-sm font-mono text-slate-100 break-words">—</div>
+            <div id="warnTxt" class="text-sm text-rose-300 mt-2 hidden"></div>
+          </div>
+
+          <div class="text-xs text-slate-400">
+            Tip: puedes arrastrar el mapa (scroll) si tu pantalla es chica.
+          </div>
+        </div>
+      </section>
+
+      <!-- Mapa -->
+      <section class="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Mapa</h2>
+          <div class="text-xs text-slate-400">Nodos y aristas (tu grafo)</div>
+        </div>
+
+        <div class="overflow-auto rounded-2xl border border-slate-800 bg-slate-950">
+          <!-- canvas con SVG -->
+          <svg id="map" width="900" height="520" viewBox="0 0 900 520" class="block">
+            <!-- aristas -->
+            <g id="edges"></g>
+
+            <!-- ruta resaltada -->
+            <g id="pathEdges"></g>
+
+            <!-- nodos -->
+            <g id="nodes"></g>
+
+            <!-- agente -->
+            <g id="agentLayer"></g>
+          </svg>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script>
+/** =========================
+ *  1) GRAFO (mismo que tu Python)
+ *  ========================= */
+const nodes = [..."ABCDEFGHIJKLMNOPQRST"];
+const edges = [
+  ["A","B"],
+  ["B","C"], ["B","D"],
+  ["C","J"], ["J","O"], ["C","M"],
+  ["M","N"],
+  ["N","L"], ["L","H"], ["N","G"],
+  ["G","I"],
+  ["I","R"], ["I","P"],
+  ["P","S"], ["S","Q"], ["Q","T"],
+  ["K","E"], ["K","F"], ["K","P"],
+  ["F","Q"],
+];
+
+// Lista de adyacencia
+const adj = new Map(nodes.map(n => [n, []]));
+for (const [u,v] of edges) {
+  adj.get(u).push(v);
+  adj.get(v).push(u);
+}
+
+/** =========================
+ *  2) POSICIONES (para que parezca tu dibujo)
+ *  (Puedes moverlas si quieres que coincida exacto)
+ *  ========================= */
+const pos = {
+  A:[90,80],  B:[210,80], D:[320,80],
+  C:[160,160], M:[280,160],
+  J:[160,250], O:[60,250],
+  H:[120,330], L:[240,330],
+  N:[360,240], G:[450,320],
+  I:[560,320], R:[650,250],
+  P:[560,420], S:[650,420],
+  Q:[760,460], T:[760,520-40],
+  K:[360,460], E:[260,460], F:[480,470]
+};
+
+/** =========================
+ *  3) UI Helpers
+ *  ========================= */
+const startSel = document.getElementById("startSel");
+const goalSel  = document.getElementById("goalSel");
+const rutaTxt  = document.getElementById("rutaTxt");
+const warnTxt  = document.getElementById("warnTxt");
+
+const svg = document.getElementById("map");
+const edgesG = document.getElementById("edges");
+const pathEdgesG = document.getElementById("pathEdges");
+const nodesG = document.getElementById("nodes");
+const agentLayer = document.getElementById("agentLayer");
+
+let currentPath = [];
+let speedIdx = 0;
+const speeds = [1, 1.5, 2, 3]; // multiplicadores
+const speedLabel = document.getElementById("speedLabel");
+
+function setWarn(msg) {
+  if (!msg) { warnTxt.classList.add("hidden"); warnTxt.textContent = ""; return; }
+  warnTxt.classList.remove("hidden");
+  warnTxt.textContent = msg;
+}
+
+function populateSelects() {
+  for (const s of nodes) {
+    const o1 = document.createElement("option");
+    o1.value = s; o1.textContent = s;
+    startSel.appendChild(o1);
+
+    const o2 = document.createElement("option");
+    o2.value = s; o2.textContent = s;
+    goalSel.appendChild(o2);
+  }
+  startSel.value = "A";
+  goalSel.value = "T";
+}
+
+/** =========================
+ *  4) BFS (ruta más corta)
+ *  ========================= */
+function bfsPath(start, goal) {
+  if (start === goal) return [start];
+  const q = [start];
+  const prev = new Map();
+  prev.set(start, null);
+
+  while (q.length) {
+    const u = q.shift();
+    for (const v of adj.get(u)) {
+      if (!prev.has(v)) {
+        prev.set(v, u);
+        if (v === goal) {
+          // reconstruir
+          const path = [];
+          let cur = goal;
+          while (cur !== null) { path.push(cur); cur = prev.get(cur); }
+          path.reverse();
+          return path;
+        }
+        q.push(v);
+      }
+    }
+  }
+  return null; // no hay ruta
+}
+
+/** =========================
+ *  5) Render del mapa
+ *  ========================= */
+function line(x1,y1,x2,y2, cls="stroke-slate-600/70", w=3) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  el.setAttribute("x1", x1); el.setAttribute("y1", y1);
+  el.setAttribute("x2", x2); el.setAttribute("y2", y2);
+  el.setAttribute("stroke-width", w);
+  el.setAttribute("class", cls);
+  el.setAttribute("stroke-linecap","round");
+  return el;
+}
+
+function circle(x,y,r, cls) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  el.setAttribute("cx", x); el.setAttribute("cy", y);
+  el.setAttribute("r", r);
+  el.setAttribute("class", cls);
+  return el;
+}
+
+function text(x,y, txt, cls) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  el.setAttribute("x", x); el.setAttribute("y", y);
+  el.setAttribute("text-anchor", "middle");
+  el.setAttribute("dominant-baseline", "middle");
+  el.setAttribute("class", cls);
+  el.textContent = txt;
+  return el;
+}
+
+function clearGroup(g) { while (g.firstChild) g.removeChild(g.firstChild); }
+
+function renderBase() {
+  clearGroup(edgesG);
+  clearGroup(nodesG);
+  clearGroup(pathEdgesG);
+  clearGroup(agentLayer);
+
+  // Aristas base
+  for (const [u,v] of edges) {
+    const [x1,y1] = pos[u];
+    const [x2,y2] = pos[v];
+    edgesG.appendChild(line(x1,y1,x2,y2));
+  }
+
+  // Nodos
+  for (const n of nodes) {
+    if (!pos[n]) continue;
+
+    const [x,y] = pos[n];
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("data-node", n);
+
+    const base = circle(x,y,18,"fill-slate-900 stroke-slate-300");
+    base.setAttribute("stroke-width","2");
+
+    const label = text(x, y, n, "fill-slate-100 font-semibold text-[12px]");
+
+    g.appendChild(base);
+    g.appendChild(label);
+    nodesG.appendChild(g);
+  }
+
+  // Agente (bolita)
+  const agent = circle(0,0,10,"fill-sky-400 drop-shadow");
+  agent.setAttribute("id","agent");
+  agentLayer.appendChild(agent);
+
+  updateHighlights();
+}
+
+function updateHighlights() {
+  const start = startSel.value;
+  const goal = goalSel.value;
+
+  // reset nodos
+  [...nodesG.children].forEach(g => {
+    const node = g.getAttribute("data-node");
+    const c = g.querySelector("circle");
+    if (!c) return;
+
+    c.setAttribute("class","fill-slate-900 stroke-slate-300");
+    c.setAttribute("stroke-width","2");
+
+    if (node === start) {
+      c.setAttribute("class","fill-sky-600 stroke-sky-200");
+      c.setAttribute("stroke-width","3");
+    }
+    if (node === goal) {
+      c.setAttribute("class","fill-emerald-600 stroke-emerald-200");
+      c.setAttribute("stroke-width","3");
+    }
+  });
+
+  // coloca agente en start
+  const agent = document.getElementById("agent");
+  if (pos[start] && agent) {
+    agent.setAttribute("cx", pos[start][0]);
+    agent.setAttribute("cy", pos[start][1]);
+  }
+}
+
+/** =========================
+ *  6) Dibujar ruta
+ *  ========================= */
+function renderPath(path) {
+  clearGroup(pathEdgesG);
+  if (!path || path.length < 2) return;
+
+  for (let i=0; i<path.length-1; i++) {
+    const u = path[i], v = path[i+1];
+    const [x1,y1] = pos[u];
+    const [x2,y2] = pos[v];
+    pathEdgesG.appendChild(line(x1,y1,x2,y2,"stroke-amber-300/90",6));
+  }
+}
+
+/** =========================
+ *  7) Animación del agente
+ *  ========================= */
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function animatePath(path) {
+  setWarn("");
+  if (!path || path.length === 0) return;
+
+  const agent = document.getElementById("agent");
+  if (!agent) return;
+
+  // vuelve al inicio
+  const start = path[0];
+  agent.setAttribute("cx", pos[start][0]);
+  agent.setAttribute("cy", pos[start][1]);
+
+  const baseDelay = 600; // ms
+  const mult = speeds[speedIdx];
+
+  for (let i=1; i<path.length; i++) {
+    const node = path[i];
+    const [x,y] = pos[node];
+
+    // transición “suave”: interpolación
+    const steps = 18;
+    const [x0,y0] = [Number(agent.getAttribute("cx")), Number(agent.getAttribute("cy"))];
+    for (let k=1; k<=steps; k++) {
+      const t = k/steps;
+      agent.setAttribute("cx", x0 + (x-x0)*t);
+      agent.setAttribute("cy", y0 + (y-y0)*t);
+      await sleep((baseDelay/steps)/mult);
+    }
+    await sleep(80/mult);
+  }
+}
+
+/** =========================
+ *  8) Botones / eventos
+ *  ========================= */
+document.getElementById("btnRuta").addEventListener("click", () => {
+  const start = startSel.value;
+  const goal  = goalSel.value;
+
+  const path = bfsPath(start, goal);
+  if (!path) {
+    currentPath = [];
+    rutaTxt.textContent = "—";
+    setWarn("No existe ruta entre esos estados en el grafo.");
+    renderPath(null);
+    updateHighlights();
+    return;
+  }
+
+  currentPath = path;
+  rutaTxt.textContent = path.join(" → ");
+  renderPath(path);
+  updateHighlights();
+});
+
+document.getElementById("btnAnim").addEventListener("click", async () => {
+  if (!currentPath || currentPath.length === 0) {
+    setWarn("Primero calcula una ruta.");
+    return;
+  }
+  await animatePath(currentPath);
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  currentPath = [];
+  rutaTxt.textContent = "—";
+  setWarn("");
+  renderBase();
+});
+
+document.getElementById("btnSpeed").addEventListener("click", () => {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  speedLabel.textContent = speeds[speedIdx] + "x";
+});
+
+startSel.addEventListener("change", () => updateHighlights());
+goalSel.addEventListener("change",  () => updateHighlights());
+
+/** =========================
+ *  Init
+ *  ========================= */
+populateSelects();
+renderBase();
+
+// Calcula una ruta por defecto A->T
+currentPath = bfsPath("A","T") || [];
+rutaTxt.textContent = currentPath.length ? currentPath.join(" → ") : "—";
+renderPath(currentPath);
+updateHighlights();
+</script>
+</body>
+</html>
