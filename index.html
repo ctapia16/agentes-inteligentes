@@ -110,6 +110,9 @@
     <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4">
       <div class="flex items-center justify-between">
         <div>
+          <div class="overflow-auto rounded-2xl border border-slate-800 bg-slate-950">
+            <table id="routeRTable" class="w-full text-sm"></table>
+          </div>
           <h2 class="font-semibold">Tabla de Recompensas (R)</h2>
           <p class="text-sm text-slate-300">
             R depende de la meta: se pone <span class="text-emerald-300 font-semibold">100</span> solo en transiciones válidas que llegan a la meta.
@@ -410,6 +413,65 @@ function renderRewardMatrix(R) {
   `;
   rTable.innerHTML = html;
 }
+const routeRTable = document.getElementById("routeRTable");
+
+function renderRouteRewardsTable(path, R, goal) {
+  if (!path || path.length < 2) {
+    routeRTable.innerHTML = `
+      <thead class="bg-slate-950">
+        <tr>
+          <th class="text-left p-2 border-b border-slate-800">Paso</th>
+          <th class="text-left p-2 border-b border-slate-800">Estado</th>
+          <th class="text-left p-2 border-b border-slate-800">Decisión</th>
+          <th class="text-left p-2 border-b border-slate-800">Recompensa</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="odd:bg-slate-900/20">
+          <td class="p-2 border-b border-slate-800 text-slate-400" colspan="4">
+            — Calcula una ruta para ver los pasos —
+          </td>
+        </tr>
+      </tbody>
+    `;
+    return;
+  }
+
+  // Construir filas paso a paso
+  const rows = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const s = path[i];
+    const a = path[i + 1];
+    const reward = R[s][a]; // -1 o 100 (si llega a la meta)
+    const isGoalMove = (a === goal && reward === 100);
+
+    rows.push(`
+      <tr class="odd:bg-slate-900/20">
+        <td class="p-2 border-b border-slate-800 font-mono">${i + 1}</td>
+        <td class="p-2 border-b border-slate-800 font-semibold">${s}</td>
+        <td class="p-2 border-b border-slate-800 font-mono">${s} → ${a}</td>
+        <td class="p-2 border-b border-slate-800 font-mono ${isGoalMove ? 'text-emerald-300 font-semibold' : 'text-slate-200'}">
+          ${reward}
+        </td>
+      </tr>
+    `);
+  }
+
+  routeRTable.innerHTML = `
+    <thead class="sticky top-0 bg-slate-950">
+      <tr>
+        <th class="text-left p-2 border-b border-slate-800">Paso</th>
+        <th class="text-left p-2 border-b border-slate-800">Estado</th>
+        <th class="text-left p-2 border-b border-slate-800">Decisión</th>
+        <th class="text-left p-2 border-b border-slate-800">Recompensa</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.join("")}
+    </tbody>
+  `;
+}
+
 
 /* =========================
    Animación
@@ -485,6 +547,7 @@ function recalcAll() {
     routeTxt.textContent = path.join(" → ");
     setWarn("");
   }
+renderRouteRewardsTable(currentPath, R, goal);
 
   renderMap();
 }
