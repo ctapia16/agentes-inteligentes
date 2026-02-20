@@ -10,9 +10,9 @@
 <body class="min-h-screen bg-slate-950 text-slate-100">
   <div class="max-w-7xl mx-auto p-6 space-y-6">
     <header class="space-y-2">
-      <h1 class="text-2xl font-semibold">Agente Inteligente — Mapa + Adyacencia + Recompensas</h1>
+      <h1 class="text-2xl font-semibold">Agente Inteligente — Mapa + Adyacencia + Recompensas (Ruta)</h1>
       <p class="text-slate-300">
-        Selecciona estado inicial y meta. Se calcula una ruta y se muestran las tablas A (adyacencia) y R (recompensas).
+        Selecciona estado inicial y meta. Se calcula una ruta y se muestra la matriz A (adyacencia) y la tabla R SOLO de la ruta.
       </p>
     </header>
 
@@ -58,18 +58,10 @@
           <p id="warnTxt" class="text-rose-300 text-sm mt-2 hidden"></p>
         </div>
 
-        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="text-sm text-slate-300">Vista de R</div>
-            <div class="flex gap-2">
-              <button id="btnRList" class="rounded-xl px-3 py-2 text-sm border border-slate-800 bg-slate-900 hover:border-slate-700">Lista</button>
-              <button id="btnRMat"  class="rounded-xl px-3 py-2 text-sm border border-slate-800 bg-slate-900 hover:border-slate-700">Matriz</button>
-            </div>
-          </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
           <div class="text-xs text-slate-400">
-            Convención: <span class="text-slate-200">-1</span> = costo por moverse,
-            <span class="text-emerald-300 font-semibold">100</span> = llegar a la meta,
-            <span class="text-slate-600">—</span> = transición inválida.
+            Convención R (ruta): <span class="text-slate-200">-1</span> = costo por moverse,
+            <span class="text-emerald-300 font-semibold">100</span> = llegar a la meta.
           </div>
         </div>
       </div>
@@ -106,26 +98,17 @@
       </div>
     </section>
 
-    <!-- Recompensas R -->
-    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="overflow-auto rounded-2xl border border-slate-800 bg-slate-950">
-            <table id="routeRTable" class="w-full text-sm"></table>
-          </div>
-          <h2 class="font-semibold">Tabla de Recompensas (R)</h2>
-          <p class="text-sm text-slate-300">
-            R depende de la meta: se pone <span class="text-emerald-300 font-semibold">100</span> solo en transiciones válidas que llegan a la meta.
-          </p>
-        </div>
+    <!-- Recompensas SOLO de la ruta -->
+    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-3">
+      <div>
+        <h2 class="font-semibold">Tabla de Recompensas (R) — SOLO la ruta</h2>
+        <p class="text-sm text-slate-300">
+          Aquí se muestra únicamente lo que el agente “decide” en la ruta: estado actual → siguiente estado y su recompensa.
+        </p>
       </div>
 
-      <!-- Vista Lista -->
-      <div id="rList" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
-
-      <!-- Vista Matriz -->
-      <div id="rMatrixWrap" class="hidden overflow-auto rounded-2xl border border-slate-800 bg-slate-950">
-        <table id="rTable" class="min-w-[900px] w-full text-sm"></table>
+      <div class="overflow-auto rounded-2xl border border-slate-800 bg-slate-950">
+        <table id="routeRTable" class="w-full text-sm"></table>
       </div>
     </section>
   </div>
@@ -148,7 +131,7 @@ const edges = [
   ["F","Q"],
 ];
 
-// Posiciones para el mapa (ajústalas si quieres que quede idéntico)
+// Posiciones para el mapa
 const pos = {
   A:[90,80],  B:[210,80], D:[320,80],
   C:[160,160], M:[280,160],
@@ -172,19 +155,13 @@ const routeTxt = document.getElementById("routeTxt");
 const warnTxt  = document.getElementById("warnTxt");
 const debugEl  = document.getElementById("debug");
 
-const svg = document.getElementById("map");
 const edgesG = document.getElementById("edges");
 const pathEdgesG = document.getElementById("pathEdges");
 const nodesG = document.getElementById("nodes");
 const agentLayer = document.getElementById("agentLayer");
 
 const adjTable = document.getElementById("adjTable");
-const rList = document.getElementById("rList");
-const rTable = document.getElementById("rTable");
-const rMatrixWrap = document.getElementById("rMatrixWrap");
-
-const btnRList = document.getElementById("btnRList");
-const btnRMat  = document.getElementById("btnRMat");
+const routeRTable = document.getElementById("routeRTable");
 
 let currentPath = [];
 let speedIdx = 0;
@@ -252,7 +229,7 @@ function bfsPath(start, goal) {
 }
 
 /* =========================
-   Matrices A y R
+   Matriz A y Matriz R
    ========================= */
 function buildAdjacencyMatrix() {
   const A = {};
@@ -276,7 +253,6 @@ function buildRewardMatrix(goal) {
   for (const [u,v] of edges) {
     R[u][v] = -1; R[v][u] = -1;
   }
-  // Recompensa 100 solo si existe transición válida hacia la meta
   for (const s of states) {
     if (R[s][goal] !== null) R[s][goal] = 100;
   }
@@ -286,45 +262,6 @@ function buildRewardMatrix(goal) {
 /* =========================
    Render: Mapa
    ========================= */
-function renderMap() {
-  clear(edgesG); clear(pathEdgesG); clear(nodesG); clear(agentLayer);
-
-  // aristas base
-  for (const [u,v] of edges) {
-    edgesG.appendChild(svgLine(pos[u][0],pos[u][1],pos[v][0],pos[v][1], "stroke-slate-600/70", 3));
-  }
-
-  // nodos
-  const start = startSel.value;
-  const goal  = goalSel.value;
-
-  for (const s of states) {
-    const [x,y] = pos[s];
-    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
-    g.setAttribute("data-node", s);
-
-    let cls = "fill-slate-900 stroke-slate-300";
-    let sw = 2;
-    if (s === start) { cls = "fill-sky-600 stroke-sky-200"; sw = 3; }
-    if (s === goal)  { cls = "fill-emerald-600 stroke-emerald-200"; sw = 3; }
-
-    const c = svgCircle(x,y,18, cls);
-    c.setAttribute("stroke-width", String(sw));
-
-    g.appendChild(c);
-    g.appendChild(svgText(x,y,s,"fill-slate-100 font-semibold text-[12px]"));
-    nodesG.appendChild(g);
-  }
-
-  // agente en start
-  const ag = svgCircle(pos[start][0], pos[start][1], 10, "fill-sky-300");
-  ag.setAttribute("id","agent");
-  agentLayer.appendChild(ag);
-
-  // ruta
-  renderPathEdges(currentPath);
-}
-
 function renderPathEdges(path) {
   clear(pathEdgesG);
   if (!path || path.length < 2) return;
@@ -334,14 +271,44 @@ function renderPathEdges(path) {
   }
 }
 
+function renderMap() {
+  clear(edgesG); clear(pathEdgesG); clear(nodesG); clear(agentLayer);
+
+  for (const [u,v] of edges) {
+    edgesG.appendChild(svgLine(pos[u][0],pos[u][1],pos[v][0],pos[v][1], "stroke-slate-600/70", 3));
+  }
+
+  const start = startSel.value;
+  const goal  = goalSel.value;
+
+  for (const s of states) {
+    const [x,y] = pos[s];
+    let cls = "fill-slate-900 stroke-slate-300";
+    let sw = 2;
+    if (s === start) { cls = "fill-sky-600 stroke-sky-200"; sw = 3; }
+    if (s === goal)  { cls = "fill-emerald-600 stroke-emerald-200"; sw = 3; }
+
+    const c = svgCircle(x,y,18, cls);
+    c.setAttribute("stroke-width", String(sw));
+
+    nodesG.appendChild(c);
+    nodesG.appendChild(svgText(x,y,s,"fill-slate-100 font-semibold text-[12px]"));
+  }
+
+  const ag = svgCircle(pos[start][0], pos[start][1], 10, "fill-sky-300");
+  ag.setAttribute("id","agent");
+  agentLayer.appendChild(ag);
+
+  renderPathEdges(currentPath);
+}
+
 /* =========================
-   Render: Tablas
+   Render: Tabla Adyacencia
    ========================= */
 const A = buildAdjacencyMatrix();
 
 function renderAdjacencyTable() {
-  // head
-  let html = `
+  adjTable.innerHTML = `
     <thead class="sticky top-0 bg-slate-950">
       <tr>
         <th class="text-left p-2 border-b border-slate-800">A</th>
@@ -361,60 +328,11 @@ function renderAdjacencyTable() {
       `).join("")}
     </tbody>
   `;
-  adjTable.innerHTML = html;
 }
 
-function renderRewardList(R) {
-  rList.innerHTML = states.map(s => {
-    const actions = adj.get(s).map(to => {
-      const val = R[s][to];
-      const cls = val === 100 ? "text-emerald-300 font-semibold" : "text-slate-200";
-      return `
-        <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2">
-          <div class="font-mono text-sm">${s} → ${to}</div>
-          <div class="text-sm ${cls}">${val}</div>
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-        <div class="flex items-center justify-between mb-2">
-          <div class="font-semibold">${s}</div>
-          <div class="text-xs text-slate-400">acciones: ${adj.get(s).length}</div>
-        </div>
-        <div class="space-y-2">${actions}</div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderRewardMatrix(R) {
-  let html = `
-    <thead class="sticky top-0 bg-slate-950">
-      <tr>
-        <th class="text-left p-2 border-b border-slate-800">R</th>
-        ${states.map(c => `<th class="p-2 border-b border-slate-800 text-center">${c}</th>`).join("")}
-      </tr>
-    </thead>
-    <tbody>
-      ${states.map(r => `
-        <tr class="odd:bg-slate-900/20">
-          <td class="p-2 border-b border-slate-800 font-semibold">${r}</td>
-          ${states.map(c => {
-            const v = R[r][c];
-            if (v === null) return `<td class="p-2 border-b border-slate-800 text-center font-mono text-slate-600">—</td>`;
-            const cls = v === 100 ? "text-emerald-300 font-semibold" : "text-slate-200";
-            return `<td class="p-2 border-b border-slate-800 text-center font-mono ${cls}">${v}</td>`;
-          }).join("")}
-        </tr>
-      `).join("")}
-    </tbody>
-  `;
-  rTable.innerHTML = html;
-}
-const routeRTable = document.getElementById("routeRTable");
-
+/* =========================
+   Render: R SOLO de la ruta
+   ========================= */
 function renderRouteRewardsTable(path, R, goal) {
   if (!path || path.length < 2) {
     routeRTable.innerHTML = `
@@ -437,12 +355,11 @@ function renderRouteRewardsTable(path, R, goal) {
     return;
   }
 
-  // Construir filas paso a paso
   const rows = [];
   for (let i = 0; i < path.length - 1; i++) {
     const s = path[i];
     const a = path[i + 1];
-    const reward = R[s][a]; // -1 o 100 (si llega a la meta)
+    const reward = R[s][a];
     const isGoalMove = (a === goal && reward === 100);
 
     rows.push(`
@@ -466,12 +383,9 @@ function renderRouteRewardsTable(path, R, goal) {
         <th class="text-left p-2 border-b border-slate-800">Recompensa</th>
       </tr>
     </thead>
-    <tbody>
-      ${rows.join("")}
-    </tbody>
+    <tbody>${rows.join("")}</tbody>
   `;
 }
-
 
 /* =========================
    Animación
@@ -480,7 +394,7 @@ function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 async function animatePath(path) {
   setWarn("");
-  if (!path || path.length < 1) return;
+  if (!path || path.length < 2) return;
 
   const agent = document.getElementById("agent");
   if (!agent) return;
@@ -488,7 +402,6 @@ async function animatePath(path) {
   const baseDelay = 600;
   const mult = speeds[speedIdx];
 
-  // ir al inicio
   const s0 = path[0];
   agent.setAttribute("cx", pos[s0][0]);
   agent.setAttribute("cy", pos[s0][1]);
@@ -533,10 +446,7 @@ function recalcAll() {
   const goal  = goalSel.value;
 
   const R = buildRewardMatrix(goal);
-  renderRewardList(R);
-  renderRewardMatrix(R);
 
-  // ruta
   const path = bfsPath(start, goal);
   if (!path) {
     currentPath = [];
@@ -547,45 +457,27 @@ function recalcAll() {
     routeTxt.textContent = path.join(" → ");
     setWarn("");
   }
-renderRouteRewardsTable(currentPath, R, goal);
 
+  renderRouteRewardsTable(currentPath, R, goal);
   renderMap();
 }
 
 document.getElementById("btnRoute").addEventListener("click", recalcAll);
-
 document.getElementById("btnAnim").addEventListener("click", async () => {
   if (!currentPath || currentPath.length < 2) { setWarn("Primero calcula una ruta."); return; }
   await animatePath(currentPath);
 });
-
 document.getElementById("btnReset").addEventListener("click", () => {
   startSel.value = "A";
   goalSel.value = "T";
   recalcAll();
 });
-
 document.getElementById("btnSpeed").addEventListener("click", () => {
   speedIdx = (speedIdx + 1) % speeds.length;
   speedLabel.textContent = speeds[speedIdx] + "x";
 });
-
 startSel.addEventListener("change", recalcAll);
 goalSel.addEventListener("change",  recalcAll);
-
-// toggle R views
-btnRList.addEventListener("click", () => {
-  rMatrixWrap.classList.add("hidden");
-  rList.classList.remove("hidden");
-  btnRList.classList.add("bg-slate-950","border-slate-700");
-  btnRMat.classList.remove("bg-slate-950","border-slate-700");
-});
-btnRMat.addEventListener("click", () => {
-  rList.classList.add("hidden");
-  rMatrixWrap.classList.remove("hidden");
-  btnRMat.classList.add("bg-slate-950","border-slate-700");
-  btnRList.classList.remove("bg-slate-950","border-slate-700");
-});
 
 /* =========================
    Init
@@ -594,8 +486,6 @@ debugEl.textContent = `states=${states.length}, edges=${edges.length}`;
 populateSelects();
 renderAdjacencyTable();
 recalcAll();
-// default highlight button
-btnRList.classList.add("bg-slate-950","border-slate-700");
 </script>
 </body>
 </html>
